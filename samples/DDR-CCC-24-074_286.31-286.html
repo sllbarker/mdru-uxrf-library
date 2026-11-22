@@ -44,6 +44,12 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
 #trav{margin-top:10px}#trav .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}#trav .chips button{padding:3px 9px;font-size:.84rem}#trav .chip{display:inline-flex;align-items:center;gap:2px}#trav input[type=color]{width:22px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;background:none}
 #trav svg{width:100%;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;font:11px system-ui,sans-serif}
 #trav .gl{stroke:#e6e2d8}#trav .frame{fill:none;stroke:#bbb}#trav .ln{fill:none;stroke-width:2}#trav .eb{stroke-width:1;opacity:.5}#trav .ctr{stroke:#999;stroke-dasharray:4 3}
+#helpbtn{border-radius:50%;width:32px;height:32px;padding:0;font-weight:700;margin-left:auto}
+dialog#help{border:1px solid var(--line);border-radius:12px;padding:0;max-width:min(640px,92vw);width:92vw;background:var(--surface);color:var(--ink)}
+dialog#help::backdrop{background:rgba(0,0,0,.45)}
+#help .hb{padding:14px 18px 18px;max-height:80vh;overflow:auto;font-size:.92rem}
+#help h2{font-family:ui-serif,Georgia,serif;font-size:1.2rem;margin:0 0 6px}#help h3{font-size:.95rem;margin:14px 0 4px;color:var(--accent)}
+#help ul{margin:4px 0;padding-left:20px}#help li{margin:3px 0}#help .close{float:right;margin:-2px -6px 0 0}
 .hint{position:absolute;right:8px;bottom:6px;color:#ccc;font-size:11px;pointer-events:none;background:rgba(0,0,0,.4);padding:2px 6px;border-radius:4px}
 </style></head><body><main>
 <div class="top"><a href="../index.html#sitka">‹ Library</a><h1>DDR-CCC-24-074 286.31 m</h1><span class="small muted">DDR-CCC-24-074, 286.31 m · Sitka — RC Gold project</span></div>
@@ -55,7 +61,29 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
  <button id="tvbtn" title="Draw a swath across the map and plot the elements along it">Traverse</button>
  <button id="rgbtn" title="Loop an area and plot its pixels on a ternary">Region</button>
  <span id="zoom"><button data-z="1" class="on">fit</button><button data-z="2">2×</button><button data-z="4">4×</button></span>
+ <button id="helpbtn" title="How to use this page">?</button>
 </div>
+<dialog id="help"><div class="hb"><button class="close" onclick="document.getElementById('help').close()">Close</button>
+<h2>How to use this page</h2>
+<p class="small muted">Every map is X-ray window counts from the Bruker M4 Tornado: brightness compares one element across this sample, not one element with another, and nothing here is a concentration.</p>
+<h3>Looking at the maps</h3>
+<ul><li><b>Layer</b>: keyed RGB composites first (each colour is one element, mixed colours mean more than one), then single elements, then K/Al and Na/Al ratio maps.</li>
+<li><b>Opacity</b> fades the map over the photo; <b>black is transparent</b> drops the dark background so the rock shows through.</li>
+<li><b>Zoom</b>: pinch, mouse wheel, or the fit / 2× / 4× buttons; drag to pan when zoomed in.</li>
+<li><b>Tap</b> a spot for its element fingerprint and a rule-of-thumb mineral suggestion. Check it against the hand sample.</li></ul>
+<h3>Traverse</h3>
+<ul><li>Press <b>Traverse</b>, then drag across a vein. The arrow is the positive end.</li>
+<li>Drag the round end handles to change length and direction, the square handle to change width, the centre handle to move.</li>
+<li>Pick elements with the chips (click a swatch to change a colour). Plot as display level, approximate counts, ratio to Al, or normalised to each element's maximum; <b>stacked panels</b> gives every element its own axis; <b>log axis</b> helps when one element dominates.</li>
+<li><b>Download CSV</b> saves the bins for Excel.</li></ul>
+<h3>Region and ternary</h3>
+<ul><li>Press <b>Region</b>, then drag a loop around an area. Its pixels appear on a ternary in the right-hand panel.</li>
+<li>Choose the apices from the presets (K–Na–Ca, K–Al–Ca, K–Al–Si, Fe–S–Cu…) or the dropdowns.</li>
+<li>Red markers are ideal minerals by molar atom fraction; because the axes are count ratios, expect clusters near, not on, the markers (light elements such as Na and Mg count low).</li>
+<li><b>Tap a cluster</b> on the ternary to light those pixels up on the map; tap empty space to clear.</li></ul>
+<h3>Offline</h3>
+<p>Back on the library page, each suite has <b>Save this suite for offline</b>. Once saved, this page works without a connection. Traverses, regions and colours are kept while the browser tab is open.</p>
+</div></dialog>
 <div class="two">
 <div>
  <div class="stagewrap" id="wrap"><div class="stage" id="stage"><img class="bgimg" id="bg" alt=""><canvas id="cv"></canvas><canvas id="hl"></canvas><svg class="tv" id="tv"></svg><div class="probe" id="probe"></div></div><div class="hint">drag · pinch · tap for fingerprint</div></div>
@@ -283,6 +311,7 @@ rgbtn.classList.toggle('on',!!st.rg);if(st.rg){$('.hint').textContent='drag a lo
 tvbtn.onclick=()=>{st.tv=!st.tv;if(st.tv&&st.rg){st.rg=false;rgbtn.classList.remove('on');ternary();}save();tvbtn.classList.toggle('on',!!st.tv);$('.hint').textContent=st.tv?'drag to draw a traverse · pinch to zoom · tap for fingerprint':'drag · pinch · tap for fingerprint';overlay();profile();};
 tvbtn.classList.toggle('on',!!st.tv);if(st.tv){$('.hint').textContent='drag to draw a traverse · pinch to zoom · tap for fingerprint';if(st.trav)profile();}
 sel.onchange=()=>{st.lay=sel.value;draw();};$('#op').oninput=()=>{st.op=+$('#op').value;cv.style.opacity=st.op/100;save();};$('#clr').onchange=()=>{st.clr=$('#clr').checked;draw();};
+$('#helpbtn').onclick=()=>{const d=$('#help');if(d.showModal)d.showModal();else d.setAttribute('open','');};
 bg.onload=()=>{draw();};if(bg.complete)draw();window.addEventListener('resize',applyZoom);
 
 </script></main></body></html>
