@@ -38,7 +38,10 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
 .tv .arr{stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke;fill:none}
 .tv .hdl{fill:rgba(255,255,255,.9);stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:all;cursor:grab}
 .tv .hdl.on{fill:#ffd166}
-#trav{margin-top:10px}#trav .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}#trav .chips button{padding:3px 9px;font-size:.84rem}
+.tv .rg{fill:rgba(255,209,102,.12);stroke:#ffd166;stroke-width:2;vector-effect:non-scaling-stroke}
+#hl{position:absolute;pointer-events:none;image-rendering:pixelated}
+#tern{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}#tern .chips{display:flex;flex-wrap:wrap;gap:5px;margin:5px 0}#tern .chips button{padding:3px 8px;font-size:.8rem}#tern select{font-size:.8rem;padding:3px 4px}#tern canvas{width:100%;display:block;border:1px solid var(--line);border-radius:8px;background:var(--surface);touch-action:manipulation}
+#trav{margin-top:10px}#trav .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}#trav .chips button{padding:3px 9px;font-size:.84rem}#trav .chip{display:inline-flex;align-items:center;gap:2px}#trav input[type=color]{width:22px;height:22px;padding:0;border:1px solid var(--line);border-radius:5px;background:none}
 #trav svg{width:100%;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;font:11px system-ui,sans-serif}
 #trav .gl{stroke:#e6e2d8}#trav .frame{fill:none;stroke:#bbb}#trav .ln{fill:none;stroke-width:2}#trav .eb{stroke-width:1;opacity:.5}#trav .ctr{stroke:#999;stroke-dasharray:4 3}
 .hint{position:absolute;right:8px;bottom:6px;color:#ccc;font-size:11px;pointer-events:none;background:rgba(0,0,0,.4);padding:2px 6px;border-radius:4px}
@@ -50,11 +53,12 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
  <label>Opacity <input id="op" type="range" min="0" max="100" value="100"></label>
  <label><input id="clr" type="checkbox"> black is transparent</label>
  <button id="tvbtn" title="Draw a swath across the map and plot the elements along it">Traverse</button>
+ <button id="rgbtn" title="Loop an area and plot its pixels on a ternary">Region</button>
  <span id="zoom"><button data-z="1" class="on">fit</button><button data-z="2">2×</button><button data-z="4">4×</button></span>
 </div>
 <div class="two">
 <div>
- <div class="stagewrap" id="wrap"><div class="stage" id="stage"><img class="bgimg" id="bg" alt=""><canvas id="cv"></canvas><svg class="tv" id="tv"></svg><div class="probe" id="probe"></div></div><div class="hint">drag · pinch · tap for fingerprint</div></div>
+ <div class="stagewrap" id="wrap"><div class="stage" id="stage"><img class="bgimg" id="bg" alt=""><canvas id="cv"></canvas><canvas id="hl"></canvas><svg class="tv" id="tv"></svg><div class="probe" id="probe"></div></div><div class="hint">drag · pinch · tap for fingerprint</div></div>
  <div class="leg" id="leg"></div>
  <div class="small muted" id="read"></div>
  <div id="trav" style="display:none"></div>
@@ -62,6 +66,7 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
 <div class="panel">
  <div class="small muted" id="fphint">Tap any spot on the map to see its element fingerprint (3 × 3 pixel mean, display level 0–255 within this sample).</div>
  <div class="fp" id="fp"></div><div class="guess" id="guess"></div>
+ <div id="tern" style="display:none"></div>
  <table class="facts" id="facts"></table>
 </div>
 </div>
@@ -100,9 +105,9 @@ sel.innerHTML=(COMPS.length?`<optgroup label="Keyed composites (RGB)">${COMPS.ma
  `<optgroup label="Trace (noise floor removed)">${ORDER.filter(e=>LY[e].kind==='trace').map(e=>`<option value="el:${e}">${nm(e)}</option>`).join('')}</optgroup>`+`<option value="none">none (photo only)</option>`;
 if(![...sel.options].some(o=>o.value===st.lay))st.lay=sel.options[0].value;
 $('#facts').innerHTML=A.facts.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-const bg=$('#bg'),cv=$('#cv'),tv=$('#tv'),stage=$('#stage'),wrap=$('#wrap');
+const bg=$('#bg'),cv=$('#cv'),hl=$('#hl'),tv=$('#tv'),stage=$('#stage'),wrap=$('#wrap');
 bg.src=A.bg; const B=A.box; // map rectangle as fractions of the background
-function place(){for(const el of [cv,tv]){el.style.left=(100*B[0])+'%';el.style.top=(100*B[1])+'%';el.style.width=(100*B[2])+'%';el.style.height=(100*B[3])+'%';}tv.setAttribute('viewBox',`0 0 ${W} ${H}`);tv.setAttribute('preserveAspectRatio','none');}
+function place(){for(const el of [cv,hl,tv]){el.style.left=(100*B[0])+'%';el.style.top=(100*B[1])+'%';el.style.width=(100*B[2])+'%';el.style.height=(100*B[3])+'%';}tv.setAttribute('viewBox',`0 0 ${W} ${H}`);tv.setAttribute('preserveAspectRatio','none');}
 async function image(){const img=new ImageData(W,H),d=img.data;
  if(st.lay.startsWith('rgb:')){const es=st.lay.slice(4).split(','),L=await Promise.all(es.map(layer)),[fa,fb,fc]=L.map(samp);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const j=(y*W+x)*4,r=fa(x,y),g=fb(x,y),b=fc(x,y);d[j]=r;d[j+1]=g;d[j+2]=b;const m=Math.max(r,g,b);d[j+3]=st.clr?(m<14?0:Math.min(255,m*1.6)):255;}}
@@ -128,14 +133,18 @@ function applyZoom(){const r=wrap.getBoundingClientRect(),sw0=stage.offsetWidth,
  stage.style.transform=`translate(${st.tx}px,${st.ty}px) scale(${st.z})`;if(typeof overlay==='function'&&!tlive)overlay();}
 const P=new Map();let pinch=null,moved=false,down=null;
 wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);P.set(e.pointerId,[e.clientX,e.clientY]);moved=false;down=[e.clientX,e.clientY,st.tx,st.ty];
- if(st.tv&&P.size===1){const h=e.target.closest&&e.target.closest('.hdl');tdrag={kind:h?h.dataset.h:'new',start:mapXYf(e.clientX,e.clientY),base:st.trav?{...st.trav}:null,moved:false};}
+ if(P.size===2){tdrag=null;rdrag=null;tlive=null;}
+ else if(st.tv&&P.size===1){const h=e.target.closest&&e.target.closest('.hdl');tdrag={kind:h?h.dataset.h:'new',start:mapXYf(e.clientX,e.clientY),base:st.trav?{...st.trav}:null,moved:false};}
+ else if(st.rg&&P.size===1){rdrag={pts:[mapXYf(e.clientX,e.clientY)],moved:false};}
  if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:st.z,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,tx:st.tx,ty:st.ty};}});
 wrap.addEventListener('pointermove',e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,[e.clientX,e.clientY]);
  if(P.size===2&&pinch){const[a,b]=[...P.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]),r=wrap.getBoundingClientRect(),z=Math.max(1,Math.min(8,pinch.z*d/pinch.d));
   const px=pinch.cx-r.left,py=pinch.cy-r.top;st.tx=px-(px-pinch.tx)*z/pinch.z;st.ty=py-(py-pinch.ty)*z/pinch.z;st.z=z;moved=true;applyZoom();}
  else if(P.size===1&&tdrag){tmove(e);}
+ else if(P.size===1&&rdrag){rmove(e);}
  else if(P.size===1&&down){const dx=e.clientX-down[0],dy=e.clientY-down[1];if(Math.hypot(dx,dy)>6)moved=true;if(moved&&st.z>1){st.tx=down[2]+dx;st.ty=down[3]+dy;applyZoom();}}});
 function up(e){P.delete(e.pointerId);if(P.size<2)pinch=null;if(tdrag){const d=tdrag;tdrag=null;if(d.moved){tend(d);down=null;save();return;}}
+ if(rdrag){const d=rdrag;rdrag=null;if(d.moved){rend(d);down=null;save();return;}}
  if(P.size===0){if(!moved&&down)probeAt(e.clientX,e.clientY);down=null;save();}}
 wrap.addEventListener('pointerup',up);wrap.addEventListener('pointercancel',up);
 wrap.addEventListener('wheel',e=>{e.preventDefault();const r=wrap.getBoundingClientRect(),z=Math.max(1,Math.min(8,st.z*(e.deltaY<0?1.15:1/1.15))),px=e.clientX-r.left,py=e.clientY-r.top;st.tx=px-(px-st.tx)*z/st.z;st.ty=py-(py-st.ty)*z/st.z;st.z=z;applyZoom();save();},{passive:false});
@@ -167,7 +176,7 @@ function guess(v){const g=e=>v[e]||0,hi=e=>g(e)>120,md=e=>g(e)>60,lo=e=>g(e)<40,
 /* ---- traverse: a swath drawn on the map, binned along its length (ported from the Valley practical; line mode only: no vein mask here) ---- */
 const tvbtn=$('#tvbtn'),travEl=$('#trav');let tdrag=null;const BIN=Math.max(1,Math.round(0.5/A.px_mm));const PX=A.px_mm;
 const ELCOL={K:'#2a6f97',Al:'#8a5a00',Si:'#555',Ca:'#2a9d8f',Fe:'#c0392b',S:'#e39a12',Cu:'#d35400',Zn:'#7b2cbf',As:'#b5179e',Na:'#4895ef',Mg:'#90be6d',Ti:'#6c757d',Mn:'#f3722c',Sr:'#43aa8b',Rb:'#577590',P:'#f9c74f',Cl:'#a7c957',W:'#3a0ca3',Mo:'#4d908e',Bi:'#9d0208',Au_Lb:'#ffb703',Pb_Lb:'#495057',Zr:'#6a994e',Ni:'#588157',Cr:'#386641',Ba:'#bc6c25',Au_La:'#ffd166',W_Lb:'#3f37c9',As_Kb:'#f72585'};
-const tcol=e=>ELCOL[e]||'#'+((Math.abs([...e].reduce((a,c)=>a*31+c.charCodeAt(0),7))%0xffffff)|0x404040).toString(16).padStart(6,'0');
+const tcol=e=>(st.ecol&&st.ecol[e])||ELCOL[e]||'#'+((Math.abs([...e].reduce((a,c)=>a*31+c.charCodeAt(0),7))%0xffffff)|0x404040).toString(16).padStart(6,'0');
 function mapXYf(cx,cy){const r=cv.getBoundingClientRect();return[(cx-r.left)/r.width*W,(cy-r.top)/r.height*H];}
 const geom=g=>{const nm=g.nm,st_=[nm[1],-nm[0]];return{...g,st:st_,corners:[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[g.cx+a*nm[0]*g.hl+b*st_[0]*g.hw,g.cy+a*nm[1]*g.hl+b*st_[1]*g.hw])};};
 let tlive=null;
@@ -178,7 +187,7 @@ function tmove(e){const d=tdrag,f=mapXYf(e.clientX,e.clientY),dx=f[0]-d.start[0]
  else if(d.kind==='m'){tlive={...b,cx:b.cx+dx,cy:b.cy+dy};}
  overlay();}
 function tend(d){const g=tlive;tlive=null;if(!g||g.hl<2){overlay();return;}st.trav={cx:g.cx,cy:g.cy,nm:g.nm,hl:g.hl,hw:g.hw};save();overlay();profile();}
-function overlay(){const g0=tlive||st.trav;if(!st.tv||!g0){tv.innerHTML='';return;}const g=geom(g0),nm=g.nm,sx=g.st;let s=`<polygon class="sw" points="${g.corners.map(c=>c.join(',')).join(' ')}"/>`;
+function overlay(){const rp=(rdrag&&rdrag.moved)?rdrag.pts:st.region;let s=rp&&rp.length>1?`<polygon class="rg" points="${rp.map(c=>c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ')}"/>`:'';const g0=tlive||st.trav;if(!st.tv||!g0){tv.innerHTML=s;return;}const g=geom(g0),nm=g.nm,sx=g.st;s+=`<polygon class="sw" points="${g.corners.map(c=>c.join(',')).join(' ')}"/>`;
  const a=[g.cx-nm[0]*g.hl*.85,g.cy-nm[1]*g.hl*.85],b=[g.cx+nm[0]*g.hl*.85,g.cy+nm[1]*g.hl*.85],k=Math.max(2,Math.min(14,g.hl*.12));
  s+=`<line class="arr" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><polyline class="arr" points="${b[0]-nm[0]*k+sx[0]*k*.6},${b[1]-nm[1]*k+sx[1]*k*.6} ${b[0]},${b[1]} ${b[0]-nm[0]*k-sx[0]*k*.6},${b[1]-nm[1]*k-sx[1]*k*.6}"/>`;
  if(!tlive){const r=13*W/Math.max(1,cv.getBoundingClientRect().width);   /* ~13 screen px whatever the zoom */const H_=[['e1',[g.cx-nm[0]*g.hl,g.cy-nm[1]*g.hl],'c'],['e2',[g.cx+nm[0]*g.hl,g.cy+nm[1]*g.hl],'c'],['w',[g.cx+sx[0]*g.hw,g.cy+sx[1]*g.hw],'s'],['m',[g.cx,g.cy],'m']];
@@ -202,25 +211,76 @@ function linePlot(cfg){const Wd=900,Hd=cfg.h||300,m={l:56,r:14,t:22,b:36},iw=Wd-
  cfg.series.forEach((se,i)=>s+=`<circle cx="${m.l+10+i*95}" cy="${m.t+10}" r="4" fill="${se.c}"/><text x="${m.l+18+i*95}" y="${m.t+14}">${se.t}</text>`);return s+'</svg>';}
 let TB=null;
 async function profile(){if(!st.tv||!st.trav){travEl.style.display='none';return;}travEl.style.display='block';const els=travEls(),mode=st.tmode||'lvl';
- const chips=`<div class="chips"><span class="small muted" style="align-self:center">Elements:</span>${ORDER.map(e=>`<button data-e="${e}" class="${els.includes(e)?'on':''}" style="${els.includes(e)?'border-color:'+tcol(e):''}">${e}</button>`).join('')}</div>
- <div class="chips"><span class="small muted" style="align-self:center">Plot:</span><button data-m="lvl" class="${mode==='lvl'?'on':''}">display level 0–255</button><button data-m="cnt" class="${mode==='cnt'?'on':''}">counts / px (approx.)</button>${LY.Al?`<button data-m="ral" class="${mode==='ral'?'on':''}">ratio to Al (approx.)</button>`:''}<button data-m="rel" class="${mode==='rel'?'on':''}">each element ÷ its max</button><button data-m="log" class="${st.tlog&&mode!=='lvl'?'on':''}" ${mode==='lvl'?'disabled':''}>log axis</button><button data-m="csv">Download CSV</button><button data-m="clear">Clear</button></div>`;
+ const chips=`<div class="chips"><span class="small muted" style="align-self:center">Elements:</span>${ORDER.map(e=>`<span class="chip"><button data-e="${e}" class="${els.includes(e)?'on':''}" style="${els.includes(e)?'border-color:'+tcol(e):''}">${e}</button>${els.includes(e)?`<input type="color" data-c="${e}" value="${tcol(e)}" title="colour for ${e}">`:''}</span>`).join('')}</div>
+ <div class="chips"><span class="small muted" style="align-self:center">Plot:</span><button data-m="lvl" class="${mode==='lvl'?'on':''}">display level 0–255</button><button data-m="cnt" class="${mode==='cnt'?'on':''}">counts / px (approx.)</button>${LY.Al?`<button data-m="ral" class="${mode==='ral'?'on':''}">ratio to Al (approx.)</button>`:''}<button data-m="rel" class="${mode==='rel'?'on':''}">normalise to max</button><button data-m="stack" class="${st.tstack?'on':''}">stacked panels</button><button data-m="log" class="${st.tlog&&mode!=='lvl'?'on':''}" ${mode==='lvl'?'disabled':''}>log axis</button><button data-m="csv">Download CSV</button><button data-m="clear">Clear</button></div>`;
  if(!els.length){travEl.innerHTML=chips+'<p class="small muted">Pick one or more elements to plot.</p>';wire();return;}
  const need=mode==='ral'&&!els.includes('Al')?[...els,'Al']:els;TB=await computeTrav(need);const g=st.trav,hl=g.hl*PX;
  const series=els.map(e=>{const mx=Math.max(1e-9,...TB.map(b=>b.cnt[e]));return{t:nm(e).split(' ')[0],c:tcol(e),pts:TB.map(b=>{let y,er=0;if(mode==='lvl')y=b.lvl[e];else if(mode==='cnt'){y=b.cnt[e];er=Math.sqrt(Math.max(b.cnt[e]*b.n,1))/b.n;}else if(mode==='rel')y=b.cnt[e]/mx;else{y=b.cnt[e]/Math.max(b.cnt.Al,1e-6);}return{x:b.d,y,e:er};})};});
  const LOG=st.tlog&&mode!=='lvl';if(LOG)series.forEach(se=>se.pts.forEach(p=>{p.y=Math.log10(Math.max(p.y,1e-4));p.e=0;}));
  series.forEach(se=>se.t=se.t.replace(/_L[ab]$/,m=>m==='_Lb'?' Lβ':' Lα'));
- let ys=series.flatMap(se=>se.pts.map(p=>p.y)).filter(isFinite);let y0=0,y1=mode==='lvl'?255:mode==='rel'&&!LOG?1:Math.max(...ys,1e-6)*1.08;if(mode!=='lvl'&&mode!=='rel'&&ys.length){const lo=Math.min(...ys);if(lo>0.3*y1)y0=lo*0.9;}
- if(LOG&&ys.length){y0=Math.floor(Math.min(...ys));y1=Math.ceil(Math.max(...ys));if(y1<=y0)y1=y0+1;}
+ const yrange=ser=>{let ys=ser.flatMap(se=>se.pts.map(p=>p.y)).filter(isFinite);let y0=0,y1=mode==='lvl'?255:mode==='rel'&&!LOG?1:Math.max(...ys,1e-6)*1.08;if(mode!=='lvl'&&mode!=='rel'&&ys.length){const lo=Math.min(...ys);if(lo>0.3*y1)y0=lo*0.9;}
+  if(LOG&&ys.length){y0=Math.floor(Math.min(...ys));y1=Math.ceil(Math.max(...ys));if(y1<=y0)y1=y0+1;}return[y0,y1];};const[y0,y1]=yrange(series);
  const yl=(mode==='lvl'?'display level (0–255, stretch within this sample)':mode==='cnt'?'counts per pixel (approx., from the stretched map)':mode==='rel'?'counts ÷ each element\'s maximum on this line':'element / Al count ratio (approx.)')+(LOG?' · log10':'');
- travEl.innerHTML=chips+linePlot({xd:[-hl,hl],yd:[y0,y1],series,log:LOG,xl:`distance along the line from its centre (mm, arrow = +) · swath ${(2*g.hw*PX).toFixed(1)} mm wide, bins ${(BIN*PX).toFixed(1)} mm`,yl})+
-  `<p class="small muted">Line ${(2*hl).toFixed(1)} mm long, ${TB.length} bins of ${TB.length?Math.round(TB.reduce((s,b)=>s+b.n,0)/TB.length):0} px. Drag the round end handles to change length and direction, the square handle for width, the centre handle to move. Levels are each element's own stretch, so curves are comparable in shape, not in height; "counts" invert that stretch and are approximate (and floor-clipped for trace elements). When one element (say Ca in a carbonate vein) flattens the others, use <b>each element ÷ its max</b> or the <b>log axis</b>.</p>`;
+ const xl=`distance along the line from its centre (mm, arrow = +) · swath ${(2*g.hw*PX).toFixed(1)} mm wide, bins ${(BIN*PX).toFixed(1)} mm`;
+ const plots=st.tstack? series.map((se,i)=>linePlot({h:150,xd:[-hl,hl],yd:yrange([se]),series:[se],log:LOG,xl:i===series.length-1?xl:'',yl:se.t+(mode==='lvl'?' level':mode==='cnt'?' counts/px':mode==='rel'?' ÷ max':' / Al')+(LOG?' (log)':'')})).join('') : linePlot({xd:[-hl,hl],yd:[y0,y1],series,log:LOG,xl,yl});
+ travEl.innerHTML=chips+plots+
+  `<p class="small muted">Line ${(2*hl).toFixed(1)} mm long, ${TB.length} bins of ${TB.length?Math.round(TB.reduce((s,b)=>s+b.n,0)/TB.length):0} px. Drag the round end handles to change length and direction, the square handle for width, the centre handle to move. Levels are each element's own stretch, so curves are comparable in shape, not in height; "counts" invert that stretch and are approximate (and floor-clipped for trace elements). When one element (say Ca in a carbonate vein) flattens the others, use <b>stacked panels</b> (one axis per element), <b>normalise to max</b> or the <b>log axis</b>. Click a colour swatch to change an element's colour.</p>`;
  wire();}
 function wire(){travEl.querySelectorAll('button[data-e]').forEach(b=>b.onclick=()=>{const e=b.dataset.e,cur=travEls();st.tels=cur.includes(e)?cur.filter(x=>x!==e):[...cur,e];save();profile();});
+ travEl.querySelectorAll('input[data-c]').forEach(i=>i.onchange=()=>{st.ecol=st.ecol||{};st.ecol[i.dataset.c]=i.value;save();profile();});
  travEl.querySelectorAll('button[data-m]').forEach(b=>b.onclick=()=>{const m=b.dataset.m;if(m==='clear'){st.trav=null;st.tels=null;save();overlay();profile();return;}
   if(m==='csv'){if(!TB)return;const els=Object.keys(TB[0].lvl);const head=['d_mm','n_px',...els.map(e=>e+'_level'),...els.map(e=>e+'_counts_px_approx')];const lines=[head.join(','),...TB.map(b=>[b.d.toFixed(2),b.n,...els.map(e=>b.lvl[e].toFixed(1)),...els.map(e=>b.cnt[e].toFixed(2))].join(','))];
    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`${A.id.replace(/\W+/g,'_')}_traverse.csv`;a.click();return;}
-  if(m==='log'){st.tlog=!st.tlog;save();profile();return;}st.tmode=m;save();profile();});}
-tvbtn.onclick=()=>{st.tv=!st.tv;save();tvbtn.classList.toggle('on',!!st.tv);$('.hint').textContent=st.tv?'drag to draw a traverse · pinch to zoom · tap for fingerprint':'drag · pinch · tap for fingerprint';overlay();profile();};
+  if(m==='log'){st.tlog=!st.tlog;save();profile();return;}if(m==='stack'){st.tstack=!st.tstack;save();profile();return;}st.tmode=m;save();profile();});}
+
+/* ---- region: a freehand loop on the map; its pixels on a ternary (count ratios, approximate) ---- */
+const rgbtn=$('#rgbtn'),ternEl=$('#tern');let rdrag=null,RM=null;   // RM = Uint8Array mask of the region
+const TPRESETS=[['K','Na','Ca'],['K','Al','Ca'],['K','Al','Si'],['Fe','S','Cu'],['Ca','Mg','Fe'],['Al','Fe','Mg'],['Ca','Fe','S']];
+const MIN={'K-feldspar':{K:1,Al:1,Si:3},'Albite':{Na:1,Al:1,Si:3},'Anorthite':{Ca:1,Al:2,Si:2},'Muscovite':{K:1,Al:3,Si:3},'Biotite':{K:1,Mg:1.5,Fe:1.5,Al:1,Si:3},'Chlorite':{Mg:2.5,Fe:2.5,Al:2,Si:3},'Epidote':{Ca:2,Al:2,Fe:1,Si:3},'Actinolite':{Ca:2,Mg:3,Fe:2,Si:8},
+ 'Calcite':{Ca:1},'Dolomite':{Ca:1,Mg:1},'Ankerite':{Ca:1,Fe:.7,Mg:.3},'Siderite':{Fe:1},'Anhydrite':{Ca:1,S:1},'Scheelite':{Ca:1,W:1},'Apatite':{Ca:5,P:3},'Titanite':{Ca:1,Ti:1,Si:1},'Rutile':{Ti:1},'Quartz':{Si:1},
+ 'Pyrite':{Fe:1,S:2},'Pyrrhotite':{Fe:1,S:1},'Chalcopyrite':{Cu:1,Fe:1,S:2},'Bornite':{Cu:5,Fe:1,S:4},'Chalcocite':{Cu:2,S:1},'Arsenopyrite':{Fe:1,As:1,S:1},'Sphalerite':{Zn:1,S:1},'Molybdenite':{Mo:1,S:2},'Galena':{Pb_Lb:1,S:1}};
+function rmove(e){const d=rdrag,f=mapXYf(e.clientX,e.clientY),l=d.pts[d.pts.length-1];if(Math.hypot(f[0]-l[0],f[1]-l[1])<Math.max(1.5,W/400))return;d.pts.push(f);if(d.pts.length>2)d.moved=true;overlay();}
+function rend(d){if(d.pts.length<3){overlay();return;}st.region=d.pts.map(p=>[+p[0].toFixed(1),+p[1].toFixed(1)]);st.tsel=null;save();overlay();ternary();}
+function regionMask(){const pts=st.region;if(!pts||pts.length<3)return null;const M=new Uint8Array(W*H);const ys=pts.map(p=>p[1]);const y0=Math.max(0,Math.floor(Math.min(...ys))),y1=Math.min(H-1,Math.ceil(Math.max(...ys)));let n=0;
+ for(let y=y0;y<=y1;y++){const yc=y+.5,xs=[];for(let i=0,j=pts.length-1;i<pts.length;j=i++){const[ax,ay]=pts[i],[bx,by]=pts[j];if((ay>yc)!==(by>yc))xs.push(ax+(yc-ay)/(by-ay)*(bx-ax));}
+  xs.sort((a,b)=>a-b);for(let k=0;k+1<xs.length;k+=2){const xa=Math.max(0,Math.ceil(xs[k]-.5)),xb=Math.min(W-1,Math.floor(xs[k+1]-.5));for(let x=xa;x<=xb;x++){M[y*W+x]=1;n++;}}}
+ M.n=n;return M;}
+function tapex(){const a=(st.tapex||[]).filter(e=>LY[e]);if(a.length===3)return a;return TPRESETS.map(p=>p.filter(e=>LY[e])).find(p=>p.length===3)||ORDER.slice(0,3);}
+const TN=110;   // density grid resolution
+let TD=null;    // last ternary: {ax, fr:Float32Array(3*n) fractions per region pixel index list, idx:Int32Array}
+async function ternary(){if(!st.rg||!st.region){ternEl.style.display='none';hl.style.display='none';return;}ternEl.style.display='block';RM=regionMask();if(!RM){ternEl.innerHTML='';return;}
+ const ax=tapex(),F=await Promise.all(ax.map(layer)),S=F.map(samp);const idx=[],fr=[];
+ const box=(k,x,y)=>{let v=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=Math.min(W-1,Math.max(0,x+dx)),yy=Math.min(H-1,Math.max(0,y+dy));v+=lvl2c(ax[k],S[k](xx,yy));}return Math.max(0,v);};   // 3 × 3 sum: single pixels are too noisy for a ternary
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(!RM[i])continue;const c=[box(0,x,y),box(1,x,y),box(2,x,y)];const t=c[0]+c[1]+c[2];if(t<=0)continue;idx.push(i);fr.push(c[0]/t,c[1]/t,c[2]/t);}
+ TD={ax,idx,fr};
+ const presets=TPRESETS.filter(p=>p.every(e=>LY[e])).map(p=>`<button data-p="${p.join(',')}" class="${p.join(',')===ax.join(',')?'on':''}">${p.join('–')}</button>`).join('');
+ const selOpt=k=>`<select data-k="${k}">${ORDER.map(e=>`<option value="${e}" ${ax[k]===e?'selected':''}>${e}</option>`).join('')}</select>`;
+ ternEl.innerHTML=`<div class="small"><b>Region ternary</b> · ${RM.n} px (${(RM.n*PX*PX).toFixed(1)} mm²)</div><div class="chips">${presets}</div><div class="chips"><span class="small muted" style="align-self:center">top</span>${selOpt(0)}<span class="small muted" style="align-self:center">left</span>${selOpt(1)}<span class="small muted" style="align-self:center">right</span>${selOpt(2)}<button data-p="clear">Clear region</button></div>
+ <canvas id="tc" width="600" height="560"></canvas><div class="small muted" id="tnote">Each point is a 3 × 3 pixel block; shade = density (log). Tap a cluster to light those pixels up on the map; tap empty space to clear. Mineral markers are ideal molar atom fractions, so they sit only roughly where count ratios put the minerals (light elements such as Na and Mg count low).</div>`;
+ ternEl.querySelectorAll('button[data-p]').forEach(b=>b.onclick=()=>{if(b.dataset.p==='clear'){st.region=null;st.tsel=null;save();overlay();ternary();return;}st.tapex=b.dataset.p.split(',');st.tsel=null;save();ternary();});
+ ternEl.querySelectorAll('select[data-k]').forEach(sl=>sl.onchange=()=>{const a=tapex().slice();a[+sl.dataset.k]=sl.value;st.tapex=a;st.tsel=null;save();ternary();});
+ drawTern();$('#tc').onclick=e=>{const r=e.target.getBoundingClientRect();const u=(e.clientX-r.left)/r.width*600,v=(e.clientY-r.top)/r.height*560;const f=txy2f(u,v);st.tsel=f&&f.every(q=>q>-0.03)?f:null;save();drawTern();};}
+const TG={x0:40,x1:560,yb:500,h:450};   // triangle on the 600×560 canvas
+const f2txy=(a,b,c)=>[TG.x0+(TG.x1-TG.x0)*(c+a/2),TG.yb-TG.h*a];
+function txy2f(u,v){const a=(TG.yb-v)/TG.h,c=(u-TG.x0)/(TG.x1-TG.x0)-a/2,b=1-a-c;return[a,b,c];}
+function drawTern(){const c=$('#tc');if(!c||!TD)return;const g=c.getContext('2d'),{ax,idx,fr}=TD;g.clearRect(0,0,600,560);
+ const D=new Float32Array(TN*TN);let mx=0;for(let k=0;k<idx.length;k++){const a=fr[3*k],cc=fr[3*k+2];const u=Math.min(TN-1,Math.floor((cc+a/2)*TN)),v=Math.min(TN-1,Math.floor(a*TN));const q=v*TN+u;D[q]++;if(D[q]>mx)mx=D[q];}
+ const cw=(TG.x1-TG.x0)/TN,ch=TG.h/TN;for(let v=0;v<TN;v++)for(let u=0;u<TN;u++){const d=D[v*TN+u];if(!d)continue;const col=ramp(VIR,Math.log1p(d)/Math.log1p(mx));g.fillStyle=`rgb(${col.map(Math.round)})`;g.fillRect(TG.x0+u*cw,TG.yb-(v+1)*ch,cw+.5,ch+.5);}
+ g.strokeStyle='#777';g.lineWidth=1.5;g.beginPath();const T=[f2txy(1,0,0),f2txy(0,1,0),f2txy(0,0,1)];g.moveTo(...T[0]);g.lineTo(...T[1]);g.lineTo(...T[2]);g.closePath();g.stroke();
+ g.fillStyle='#1b1a17';g.font='bold 20px system-ui';g.textAlign='right';g.fillText(ax[1],T[1][0]-4,T[1][1]+24);g.textAlign='left';g.fillText(ax[2],T[2][0]+4,T[2][1]+24);
+ g.font='12px system-ui';const marks={};for(const[name,comp]of Object.entries(MIN)){const tot=Object.values(comp).reduce((p,q)=>p+q,0),v=ax.map(e=>comp[e]||0),sum=v[0]+v[1]+v[2];if(sum/tot<0.1)continue;const f=v.map(q=>q/sum),key=f.map(q=>q.toFixed(2)).join();(marks[key]=marks[key]||{f,names:[]}).names.push(name);}
+ for(const{f,names}of Object.values(marks)){const[u,w]=f2txy(...f);g.fillStyle='#fff';g.strokeStyle='#b3261e';g.lineWidth=2;g.beginPath();g.arc(u,w,5,0,7);g.fill();g.stroke();g.fillStyle='#b3261e';
+  const atTop=f[0]>0.9,atL=f[1]>0.9,atR=f[2]>0.9;g.textAlign=atL?'left':atR?'right':atTop?'center':f[2]>0.5?'right':'left';const tx=atL?u+8:atR?u-8:atTop?u:u+(f[2]>0.5?-8:8),ty=(atL||atR)?w-9:atTop?w+30:w-7;
+  names.forEach((n,i)=>g.fillText(n,tx,ty+(atTop?i*14:-i*14)));}
+ g.fillStyle='#1b1a17';g.font='bold 20px system-ui';g.textAlign='center';g.fillText(nm(ax[0]).split(' ')[0],T[0][0],T[0][1]-12);
+ if(st.tsel){const[u,w]=f2txy(...st.tsel);g.strokeStyle='#e39a12';g.lineWidth=3;g.beginPath();g.arc(u,w,0.06*(TG.x1-TG.x0),0,7);g.stroke();}
+ highlight();}
+function highlight(){if(!TD||!st.tsel){hl.style.display='none';return;}const{idx,fr}=TD,img=new ImageData(W,H),d=img.data,[sa,,sc]=st.tsel,su=sc+sa/2;let n=0;
+ for(let k=0;k<idx.length;k++){const a=fr[3*k],c=fr[3*k+2];if(Math.hypot((c+a/2)-su,a-sa)<0.06){const j=idx[k]*4;d[j]=255;d[j+1]=209;d[j+2]=102;d[j+3]=230;n++;}}
+ hl.width=W;hl.height=H;hl.getContext('2d').putImageData(img,0,0);hl.style.display='block';const t=$('#tnote');if(t)t.innerHTML=`<b>${n} px highlighted</b> on the map (within 6 % of the tapped point). `+t.innerHTML.replace(/^<b>.*?<\/b> on the map \(within 6 % of the tapped point\)\. /,'');}
+rgbtn.onclick=()=>{st.rg=!st.rg;if(st.rg&&st.tv){st.tv=false;tvbtn.classList.remove('on');overlay();profile();}save();rgbtn.classList.toggle('on',!!st.rg);$('.hint').textContent=st.rg?'drag a loop around an area · pinch to zoom · tap for fingerprint':'drag · pinch · tap for fingerprint';overlay();ternary();};
+rgbtn.classList.toggle('on',!!st.rg);if(st.rg){$('.hint').textContent='drag a loop around an area · pinch to zoom · tap for fingerprint';if(st.region)ternary();}
+tvbtn.onclick=()=>{st.tv=!st.tv;if(st.tv&&st.rg){st.rg=false;rgbtn.classList.remove('on');ternary();}save();tvbtn.classList.toggle('on',!!st.tv);$('.hint').textContent=st.tv?'drag to draw a traverse · pinch to zoom · tap for fingerprint':'drag · pinch · tap for fingerprint';overlay();profile();};
 tvbtn.classList.toggle('on',!!st.tv);if(st.tv){$('.hint').textContent='drag to draw a traverse · pinch to zoom · tap for fingerprint';if(st.trav)profile();}
 sel.onchange=()=>{st.lay=sel.value;draw();};$('#op').oninput=()=>{st.op=+$('#op').value;cv.style.opacity=st.op/100;save();};$('#clr').onchange=()=>{st.clr=$('#clr').checked;draw();};
 bg.onload=()=>{draw();};if(bg.complete)draw();window.addEventListener('resize',applyZoom);
