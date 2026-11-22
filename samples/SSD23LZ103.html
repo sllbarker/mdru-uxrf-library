@@ -33,6 +33,14 @@ input[type=range]{width:130px}
 .guess{margin-top:8px;font-size:.88rem}
 table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts td{padding:2px 8px 2px 0;vertical-align:top}table.facts td:first-child{color:var(--muted);white-space:nowrap}
 .cav{background:var(--accent-soft);border-radius:8px;padding:8px 12px;font-size:.84rem;margin:10px 0}
+.stage svg.tv{position:absolute;pointer-events:none;overflow:visible}
+.tv .sw{fill:rgba(255,255,255,.1);stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke}
+.tv .arr{stroke:#fff;stroke-width:2;vector-effect:non-scaling-stroke;fill:none}
+.tv .hdl{fill:rgba(255,255,255,.9);stroke:#111;stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:all;cursor:grab}
+.tv .hdl.on{fill:#ffd166}
+#trav{margin-top:10px}#trav .chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}#trav .chips button{padding:3px 9px;font-size:.84rem}
+#trav svg{width:100%;height:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;font:11px system-ui,sans-serif}
+#trav .gl{stroke:#e6e2d8}#trav .frame{fill:none;stroke:#bbb}#trav .ln{fill:none;stroke-width:2}#trav .eb{stroke-width:1;opacity:.5}#trav .ctr{stroke:#999;stroke-dasharray:4 3}
 .hint{position:absolute;right:8px;bottom:6px;color:#ccc;font-size:11px;pointer-events:none;background:rgba(0,0,0,.4);padding:2px 6px;border-radius:4px}
 </style></head><body><main>
 <div class="top"><a href="../index.html#saddle">‹ Library</a><h1>SSD23LZ103</h1><span class="small muted">Saddle (Tatogga)</span></div>
@@ -41,13 +49,15 @@ table.facts{border-collapse:collapse;font-size:.84rem;margin-top:6px}table.facts
  <label>Layer <select id="lay"></select></label>
  <label>Opacity <input id="op" type="range" min="0" max="100" value="100"></label>
  <label><input id="clr" type="checkbox"> black is transparent</label>
+ <button id="tvbtn" title="Draw a swath across the map and plot the elements along it">Traverse</button>
  <span id="zoom"><button data-z="1" class="on">fit</button><button data-z="2">2×</button><button data-z="4">4×</button></span>
 </div>
 <div class="two">
 <div>
- <div class="stagewrap" id="wrap"><div class="stage" id="stage"><img class="bgimg" id="bg" alt=""><canvas id="cv"></canvas><div class="probe" id="probe"></div></div><div class="hint">drag · pinch · tap for fingerprint</div></div>
+ <div class="stagewrap" id="wrap"><div class="stage" id="stage"><img class="bgimg" id="bg" alt=""><canvas id="cv"></canvas><svg class="tv" id="tv"></svg><div class="probe" id="probe"></div></div><div class="hint">drag · pinch · tap for fingerprint</div></div>
  <div class="leg" id="leg"></div>
  <div class="small muted" id="read"></div>
+ <div id="trav" style="display:none"></div>
 </div>
 <div class="panel">
  <div class="small muted" id="fphint">Tap any spot on the map to see its element fingerprint (3 × 3 pixel mean, display level 0–255 within this sample).</div>
@@ -85,9 +95,9 @@ sel.innerHTML=(COMPS.length?`<optgroup label="Keyed composites (RGB)">${COMPS.ma
  `<optgroup label="Trace (noise floor removed)">${ORDER.filter(e=>LY[e].kind==='trace').map(e=>`<option value="el:${e}">${nm(e)}</option>`).join('')}</optgroup>`+`<option value="none">none (photo only)</option>`;
 if(![...sel.options].some(o=>o.value===st.lay))st.lay=sel.options[0].value;
 $('#facts').innerHTML=A.facts.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
-const bg=$('#bg'),cv=$('#cv'),stage=$('#stage'),wrap=$('#wrap');
+const bg=$('#bg'),cv=$('#cv'),tv=$('#tv'),stage=$('#stage'),wrap=$('#wrap');
 bg.src=A.bg; const B=A.box; // map rectangle as fractions of the background
-function place(){cv.style.left=(100*B[0])+'%';cv.style.top=(100*B[1])+'%';cv.style.width=(100*B[2])+'%';cv.style.height=(100*B[3])+'%';}
+function place(){for(const el of [cv,tv]){el.style.left=(100*B[0])+'%';el.style.top=(100*B[1])+'%';el.style.width=(100*B[2])+'%';el.style.height=(100*B[3])+'%';}tv.setAttribute('viewBox',`0 0 ${W} ${H}`);tv.setAttribute('preserveAspectRatio','none');}
 async function image(){const img=new ImageData(W,H),d=img.data;
  if(st.lay.startsWith('rgb:')){const es=st.lay.slice(4).split(','),L=await Promise.all(es.map(layer)),[fa,fb,fc]=L.map(samp);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const j=(y*W+x)*4,r=fa(x,y),g=fb(x,y),b=fc(x,y);d[j]=r;d[j+1]=g;d[j+2]=b;const m=Math.max(r,g,b);d[j+3]=st.clr?(m<14?0:Math.min(255,m*1.6)):255;}}
@@ -96,7 +106,7 @@ async function image(){const img=new ImageData(W,H),d=img.data;
  return img;}
 let drawn=0;
 async function draw(){const my=++drawn;sel.value=st.lay;$('#op').value=st.op;$('#clr').checked=st.clr;cv.style.opacity=st.op/100;place();
- document.querySelectorAll('#zoom button').forEach(b=>b.classList.toggle('on',+b.dataset.z===st.z));applyZoom();legend();save();
+ document.querySelectorAll('#zoom button').forEach(b=>b.classList.toggle('on',+b.dataset.z===st.z));applyZoom();legend();save();if(typeof overlay==='function'){overlay();if(!(st.tels||[]).length)profile();}
  if(st.lay==='none'){cv.style.display='none';return;}cv.style.display='block';const img=await image();if(my!==drawn)return;cv.width=W;cv.height=H;cv.getContext('2d').putImageData(img,0,0);}
 function legend(){let h='';if(st.lay==='none')h='Photo only.';else if(st.lay.startsWith('rgb:')){const es=st.lay.slice(4).split(',');h=sw('#f33',nm(es[0]))+sw('#3c3',nm(es[1]))+sw('#36f',nm(es[2]))+` <span class="muted">· ${RGBTXT[st.lay.slice(4)]||'mixed colours = more than one element'}</span>`;}
  else{const e=st.lay.slice(3),l=LY[e];h=`${nm(e)}: ${l.lo}<span class="cbar" style="background:${grad(MAG)}"></span>${l.hi} counts ${l.kind==='major'?'(2 × 2 sum, square-root stretch)':l.kind==='fine'?'(square-root stretch)':'(3 × 3 sum; below median + 3σ black)'}`;}
@@ -104,15 +114,18 @@ function legend(){let h='';if(st.lay==='none')h='Photo only.';else if(st.lay.sta
 /* ---- zoom / pan (CSS transform on the stage) ---- */
 function applyZoom(){const r=wrap.getBoundingClientRect(),sw0=stage.offsetWidth,sh0=stage.offsetHeight;wrap.style.height=(sh0)+'px';
  const maxx=0,minx=Math.min(0,r.width-sw0*st.z),maxy=0,miny=Math.min(0,sh0-sh0*st.z);st.tx=Math.max(minx,Math.min(maxx,st.tx));st.ty=Math.max(miny,Math.min(maxy,st.ty));
- stage.style.transform=`translate(${st.tx}px,${st.ty}px) scale(${st.z})`;}
+ stage.style.transform=`translate(${st.tx}px,${st.ty}px) scale(${st.z})`;if(typeof overlay==='function'&&!tlive)overlay();}
 const P=new Map();let pinch=null,moved=false,down=null;
 wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);P.set(e.pointerId,[e.clientX,e.clientY]);moved=false;down=[e.clientX,e.clientY,st.tx,st.ty];
+ if(st.tv&&P.size===1){const h=e.target.closest&&e.target.closest('.hdl');tdrag={kind:h?h.dataset.h:'new',start:mapXYf(e.clientX,e.clientY),base:st.trav?{...st.trav}:null,moved:false};}
  if(P.size===2){const[a,b]=[...P.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:st.z,cx:(a[0]+b[0])/2,cy:(a[1]+b[1])/2,tx:st.tx,ty:st.ty};}});
 wrap.addEventListener('pointermove',e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,[e.clientX,e.clientY]);
  if(P.size===2&&pinch){const[a,b]=[...P.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]),r=wrap.getBoundingClientRect(),z=Math.max(1,Math.min(8,pinch.z*d/pinch.d));
   const px=pinch.cx-r.left,py=pinch.cy-r.top;st.tx=px-(px-pinch.tx)*z/pinch.z;st.ty=py-(py-pinch.ty)*z/pinch.z;st.z=z;moved=true;applyZoom();}
+ else if(P.size===1&&tdrag){tmove(e);}
  else if(P.size===1&&down){const dx=e.clientX-down[0],dy=e.clientY-down[1];if(Math.hypot(dx,dy)>6)moved=true;if(moved&&st.z>1){st.tx=down[2]+dx;st.ty=down[3]+dy;applyZoom();}}});
-function up(e){P.delete(e.pointerId);if(P.size<2)pinch=null;if(P.size===0){if(!moved&&down)probeAt(e.clientX,e.clientY);down=null;save();}}
+function up(e){P.delete(e.pointerId);if(P.size<2)pinch=null;if(tdrag){const d=tdrag;tdrag=null;if(d.moved){tend(d);down=null;save();return;}}
+ if(P.size===0){if(!moved&&down)probeAt(e.clientX,e.clientY);down=null;save();}}
 wrap.addEventListener('pointerup',up);wrap.addEventListener('pointercancel',up);
 wrap.addEventListener('wheel',e=>{e.preventDefault();const r=wrap.getBoundingClientRect(),z=Math.max(1,Math.min(8,st.z*(e.deltaY<0?1.15:1/1.15))),px=e.clientX-r.left,py=e.clientY-r.top;st.tx=px-(px-st.tx)*z/st.z;st.ty=py-(py-st.ty)*z/st.z;st.z=z;applyZoom();save();},{passive:false});
 document.querySelectorAll('#zoom button').forEach(b=>b.onclick=()=>{st.z=+b.dataset.z;if(st.z===1){st.tx=st.ty=0;}draw();});
@@ -139,6 +152,64 @@ function guess(v){const g=e=>v[e]||0,hi=e=>g(e)>120,md=e=>g(e)>60,lo=e=>g(e)<40,
  if(md('Fe')&&md('Mg')&&md('Si')&&lo('S'))out.push('Fe–Mg silicate (biotite / chlorite / amphibole)');
  if(md('Sr')&&md('Ca')&&lo('Si'))out.push('Sr-bearing carbonate or anhydrite');if(md('Sr')&&md('S')&&lo('Fe'))out.push('celestine / barite-type sulfate');if(md('Zr'))out.push('zircon');if(md('P')&&md('Ca'))out.push('apatite (P + Ca)');
  return out.length?'<b>Suggestion:</b> '+out.join('; ')+'.':'<span class="muted">No clear single-mineral fingerprint here (mixture or low counts).</span>';}
+
+/* ---- traverse: a swath drawn on the map, binned along its length (ported from the Valley practical; line mode only: no vein mask here) ---- */
+const tvbtn=$('#tvbtn'),travEl=$('#trav');let tdrag=null;const BIN=Math.max(1,Math.round(0.5/A.px_mm));const PX=A.px_mm;
+const ELCOL={K:'#2a6f97',Al:'#8a5a00',Si:'#555',Ca:'#2a9d8f',Fe:'#c0392b',S:'#e39a12',Cu:'#d35400',Zn:'#7b2cbf',As:'#b5179e',Na:'#4895ef',Mg:'#90be6d',Ti:'#6c757d',Mn:'#f3722c',Sr:'#43aa8b',Rb:'#577590',P:'#f9c74f',Cl:'#a7c957',W:'#3a0ca3',Mo:'#4d908e',Bi:'#9d0208',Au_Lb:'#ffb703',Pb_Lb:'#495057',Zr:'#6a994e',Ni:'#588157',Cr:'#386641',Ba:'#bc6c25',Au_La:'#ffd166',W_Lb:'#3f37c9',As_Kb:'#f72585'};
+const tcol=e=>ELCOL[e]||'#'+((Math.abs([...e].reduce((a,c)=>a*31+c.charCodeAt(0),7))%0xffffff)|0x404040).toString(16).padStart(6,'0');
+function mapXYf(cx,cy){const r=cv.getBoundingClientRect();return[(cx-r.left)/r.width*W,(cy-r.top)/r.height*H];}
+const geom=g=>{const nm=g.nm,st_=[nm[1],-nm[0]];return{...g,st:st_,corners:[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,b])=>[g.cx+a*nm[0]*g.hl+b*st_[0]*g.hw,g.cy+a*nm[1]*g.hl+b*st_[1]*g.hw])};};
+let tlive=null;
+function tmove(e){const d=tdrag,f=mapXYf(e.clientX,e.clientY),dx=f[0]-d.start[0],dy=f[1]-d.start[1];if(Math.hypot(dx,dy)>3)d.moved=true;if(!d.moved)return;const b=d.base,hw0=b?b.hw:Math.max(3,Math.round(1.5/PX));
+ if(d.kind==='new'){const L=Math.hypot(dx,dy)||1;tlive={cx:(d.start[0]+f[0])/2,cy:(d.start[1]+f[1])/2,nm:[dx/L,dy/L],hl:L/2,hw:hw0};}
+ else if(d.kind==='e1'||d.kind==='e2'){const fix=d.kind==='e1'?[b.cx+b.nm[0]*b.hl,b.cy+b.nm[1]*b.hl]:[b.cx-b.nm[0]*b.hl,b.cy-b.nm[1]*b.hl];const from=d.kind==='e1'?f:fix,to=d.kind==='e1'?fix:f;const vx=to[0]-from[0],vy=to[1]-from[1],L=Math.hypot(vx,vy)||1;tlive={cx:(from[0]+to[0])/2,cy:(from[1]+to[1])/2,nm:[vx/L,vy/L],hl:L/2,hw:b.hw};}
+ else if(d.kind==='w'){const g=geom(b);tlive={...b,hw:Math.max(1,Math.abs((f[0]-b.cx)*g.st[0]+(f[1]-b.cy)*g.st[1]))};}
+ else if(d.kind==='m'){tlive={...b,cx:b.cx+dx,cy:b.cy+dy};}
+ overlay();}
+function tend(d){const g=tlive;tlive=null;if(!g||g.hl<2){overlay();return;}st.trav={cx:g.cx,cy:g.cy,nm:g.nm,hl:g.hl,hw:g.hw};save();overlay();profile();}
+function overlay(){const g0=tlive||st.trav;if(!st.tv||!g0){tv.innerHTML='';return;}const g=geom(g0),nm=g.nm,sx=g.st;let s=`<polygon class="sw" points="${g.corners.map(c=>c.join(',')).join(' ')}"/>`;
+ const a=[g.cx-nm[0]*g.hl*.85,g.cy-nm[1]*g.hl*.85],b=[g.cx+nm[0]*g.hl*.85,g.cy+nm[1]*g.hl*.85],k=Math.max(2,Math.min(14,g.hl*.12));
+ s+=`<line class="arr" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}"/><polyline class="arr" points="${b[0]-nm[0]*k+sx[0]*k*.6},${b[1]-nm[1]*k+sx[1]*k*.6} ${b[0]},${b[1]} ${b[0]-nm[0]*k-sx[0]*k*.6},${b[1]-nm[1]*k-sx[1]*k*.6}"/>`;
+ if(!tlive){const r=13*W/Math.max(1,cv.getBoundingClientRect().width);   /* ~13 screen px whatever the zoom */const H_=[['e1',[g.cx-nm[0]*g.hl,g.cy-nm[1]*g.hl],'c'],['e2',[g.cx+nm[0]*g.hl,g.cy+nm[1]*g.hl],'c'],['w',[g.cx+sx[0]*g.hw,g.cy+sx[1]*g.hw],'s'],['m',[g.cx,g.cy],'m']];
+  s+=H_.map(([key,p,t])=>t==='s'?`<rect class="hdl" data-h="${key}" x="${p[0]-r}" y="${p[1]-r}" width="${2*r}" height="${2*r}"/>`:`<circle class="hdl" data-h="${key}" cx="${p[0]}" cy="${p[1]}" r="${t==='m'?r*.8:r}"/>`).join('');}
+ tv.innerHTML=s;}
+const lvl2c=(e,v)=>{const l=LY[e];return l.lo+(v/255)**2*(l.hi-l.lo);};   // invert the square-root stretch: approximate counts per pixel
+async function computeTrav(els){const g=geom(st.trav),nm=g.nm,sx=g.st,nb=Math.max(1,Math.round(2*g.hl/BIN)),L=await Promise.all(els.map(layer)),F=L.map(samp);
+ const N=new Int32Array(nb),S=els.map(()=>new Float64Array(nb)),C=els.map(()=>new Float64Array(nb));
+ const xs=g.corners.map(c=>c[0]),ys=g.corners.map(c=>c[1]);const x0=Math.max(0,Math.floor(Math.min(...xs))),x1=Math.min(W-1,Math.ceil(Math.max(...xs))),y0=Math.max(0,Math.floor(Math.min(...ys))),y1=Math.min(H-1,Math.ceil(Math.max(...ys)));
+ for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const s=(x+.5-g.cx)*nm[0]+(y+.5-g.cy)*nm[1],t=(x+.5-g.cx)*sx[0]+(y+.5-g.cy)*sx[1];if(Math.abs(t)>g.hw||Math.abs(s)>g.hl)continue;const b=Math.min(nb-1,Math.floor((s+g.hl)/(2*g.hl)*nb));N[b]++;
+  for(let k=0;k<els.length;k++){const v=F[k](x,y);S[k][b]+=v;C[k][b]+=lvl2c(els[k],v);}}
+ const bins=[];for(let b=0;b<nb;b++){if(N[b]<Math.max(3,g.hw))continue;const r={d:(-g.hl+(b+.5)*2*g.hl/nb)*PX,n:N[b],lvl:{},cnt:{}};els.forEach((e,k)=>{r.lvl[e]=S[k][b]/N[b];r.cnt[e]=C[k][b]/N[b];});bins.push(r);}
+ return bins;}
+function travEls(){const cur=st.lay.startsWith('rgb:')?st.lay.slice(4).split(','):st.lay.startsWith('el:')?[st.lay.slice(3)]:[];const picks=(st.tels||[]).filter(e=>LY[e]);return picks.length?picks:cur;}
+function niceTicks(a,b,n){const span=b-a||1,step0=span/n,mag=10**Math.floor(Math.log10(step0));const step=[1,2,2.5,5,10].map(k=>k*mag).find(s=>s>=step0);const t=[];for(let v=Math.ceil(a/step)*step;v<=b+1e-9;v+=step)t.push(+v.toFixed(10));return t;}
+const fmt=v=>Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=10?v.toFixed(1):v.toFixed(2);
+function linePlot(cfg){const Wd=900,Hd=cfg.h||300,m={l:56,r:14,t:22,b:36},iw=Wd-m.l-m.r,ih=Hd-m.t-m.b;const[x0,x1]=cfg.xd,[y0,y1]=cfg.yd;const X=v=>m.l+(v-x0)/(x1-x0)*iw,Y=v=>m.t+ih-(Math.max(y0,Math.min(y1,v))-y0)/(y1-y0)*ih;
+ let s=`<svg viewBox="0 0 ${Wd} ${Hd}">`;niceTicks(y0,y1,5).forEach(v=>s+=`<line class="gl" x1="${m.l}" x2="${m.l+iw}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l-5}" y="${Y(v)+4}" text-anchor="end">${fmt(v)}</text>`);
+ niceTicks(x0,x1,10).forEach(v=>s+=`<text x="${X(v)}" y="${m.t+ih+14}" text-anchor="middle">${fmt(v)}</text>`);s+=`<line class="ctr" x1="${X(0)}" x2="${X(0)}" y1="${m.t}" y2="${m.t+ih}"/>`;
+ cfg.series.forEach(se=>{se.pts.forEach(p=>{if(p.e)s+=`<line class="eb" stroke="${se.c}" x1="${X(p.x)}" x2="${X(p.x)}" y1="${Y(p.y-p.e)}" y2="${Y(p.y+p.e)}"/>`;});s+=`<polyline class="ln" stroke="${se.c}" points="${se.pts.map(p=>X(p.x)+','+Y(p.y)).join(' ')}"/>`;se.pts.forEach(p=>s+=`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="2.4" fill="${se.c}"/>`);});
+ s+=`<rect class="frame" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}"/><text x="${m.l+iw/2}" y="${Hd-4}" text-anchor="middle">${cfg.xl}</text><text transform="translate(13 ${m.t+ih/2}) rotate(-90)" text-anchor="middle">${cfg.yl}</text>`;
+ cfg.series.forEach((se,i)=>s+=`<circle cx="${m.l+10+i*95}" cy="${m.t+10}" r="4" fill="${se.c}"/><text x="${m.l+18+i*95}" y="${m.t+14}">${se.t}</text>`);return s+'</svg>';}
+let TB=null;
+async function profile(){if(!st.tv||!st.trav){travEl.style.display='none';return;}travEl.style.display='block';const els=travEls(),mode=st.tmode||'lvl';
+ const chips=`<div class="chips"><span class="small muted" style="align-self:center">Elements:</span>${ORDER.map(e=>`<button data-e="${e}" class="${els.includes(e)?'on':''}" style="${els.includes(e)?'border-color:'+tcol(e):''}">${e}</button>`).join('')}</div>
+ <div class="chips"><span class="small muted" style="align-self:center">Plot:</span><button data-m="lvl" class="${mode==='lvl'?'on':''}">display level 0–255</button><button data-m="cnt" class="${mode==='cnt'?'on':''}">counts / px (approx.)</button>${LY.Al?`<button data-m="ral" class="${mode==='ral'?'on':''}">ratio to Al (approx.)</button>`:''}<button data-m="csv">Download CSV</button><button data-m="clear">Clear</button></div>`;
+ if(!els.length){travEl.innerHTML=chips+'<p class="small muted">Pick one or more elements to plot.</p>';wire();return;}
+ const need=mode==='ral'&&!els.includes('Al')?[...els,'Al']:els;TB=await computeTrav(need);const g=st.trav,hl=g.hl*PX;
+ const series=els.map(e=>({t:nm(e).split(' ')[0]+(e.length>2&&nm(e)!==e?'':''),c:tcol(e),pts:TB.map(b=>{let y,er=0;if(mode==='lvl')y=b.lvl[e];else if(mode==='cnt'){y=b.cnt[e];er=Math.sqrt(Math.max(b.cnt[e]*b.n,1))/b.n;}else{y=b.cnt[e]/Math.max(b.cnt.Al,1e-6);}return{x:b.d,y,e:er};})}));
+ series.forEach(se=>se.t=se.t.replace(/_L[ab]$/,m=>m==='_Lb'?' Lβ':' Lα'));
+ let ys=series.flatMap(se=>se.pts.map(p=>p.y)).filter(isFinite);let y0=0,y1=mode==='lvl'?255:Math.max(...ys,1e-6)*1.08;if(mode!=='lvl'&&ys.length){const lo=Math.min(...ys);if(lo>0.3*y1)y0=lo*0.9;}
+ const yl=mode==='lvl'?'display level (0–255, stretch within this sample)':mode==='cnt'?'counts per pixel (approx., from the stretched map)':'element / Al count ratio (approx.)';
+ travEl.innerHTML=chips+linePlot({xd:[-hl,hl],yd:[y0,y1],series,xl:`distance along the line from its centre (mm, arrow = +) · swath ${(2*g.hw*PX).toFixed(1)} mm wide, bins ${(BIN*PX).toFixed(1)} mm`,yl})+
+  `<p class="small muted">Line ${(2*hl).toFixed(1)} mm long, ${TB.length} bins of ${TB.length?Math.round(TB.reduce((s,b)=>s+b.n,0)/TB.length):0} px. Drag the round end handles to change length and direction, the square handle for width, the centre handle to move. Levels are each element's own stretch, so curves are comparable in shape, not in height; "counts" invert that stretch and are approximate (and floor-clipped for trace elements).</p>`;
+ wire();}
+function wire(){travEl.querySelectorAll('button[data-e]').forEach(b=>b.onclick=()=>{const e=b.dataset.e,cur=travEls();st.tels=cur.includes(e)?cur.filter(x=>x!==e):[...cur,e];save();profile();});
+ travEl.querySelectorAll('button[data-m]').forEach(b=>b.onclick=()=>{const m=b.dataset.m;if(m==='clear'){st.trav=null;st.tels=null;save();overlay();profile();return;}
+  if(m==='csv'){if(!TB)return;const els=Object.keys(TB[0].lvl);const head=['d_mm','n_px',...els.map(e=>e+'_level'),...els.map(e=>e+'_counts_px_approx')];const lines=[head.join(','),...TB.map(b=>[b.d.toFixed(2),b.n,...els.map(e=>b.lvl[e].toFixed(1)),...els.map(e=>b.cnt[e].toFixed(2))].join(','))];
+   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`${A.id.replace(/\W+/g,'_')}_traverse.csv`;a.click();return;}
+  st.tmode=m;save();profile();});}
+tvbtn.onclick=()=>{st.tv=!st.tv;save();tvbtn.classList.toggle('on',!!st.tv);$('.hint').textContent=st.tv?'drag to draw a traverse · pinch to zoom · tap for fingerprint':'drag · pinch · tap for fingerprint';overlay();profile();};
+tvbtn.classList.toggle('on',!!st.tv);if(st.tv){$('.hint').textContent='drag to draw a traverse · pinch to zoom · tap for fingerprint';if(st.trav)profile();}
 sel.onchange=()=>{st.lay=sel.value;draw();};$('#op').oninput=()=>{st.op=+$('#op').value;cv.style.opacity=st.op/100;save();};$('#clr').onchange=()=>{st.clr=$('#clr').checked;draw();};
 bg.onload=()=>{draw();};if(bg.complete)draw();window.addEventListener('resize',applyZoom);
 
